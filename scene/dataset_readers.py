@@ -236,10 +236,24 @@ def generateCamerasFromTransforms(path, template_transformsfile, extension, maxt
     # format information
     for idx, (time, poses) in enumerate(zip(render_times,render_poses)):
         time = time/maxtime
-        matrix = np.linalg.inv(np.array(poses))
-        R = -np.transpose(matrix[:3,:3])
-        R[:,0] = -R[:,0]
-        T = -matrix[:3, 3]
+        
+        # Original
+        # matrix = np.linalg.inv(np.array(poses))
+        # R = -np.transpose(matrix[:3,:3])
+        # R[:,0] = -R[:,0]
+        # T = -matrix[:3, 3]
+        
+        # Port over camera matrix bug fix from original Gaussian-splatting repo
+        # https://github.com/graphdeco-inria/gaussian-splatting/pull/111/commits/4eb6019a5680d354c452243776c071e944c7d65c
+        # NeRF 'transform_matrix' is a camera-to-world transform
+        c2w = np.array(poses)
+        # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
+        c2w[:3, 1:3] *= -1
+        # get the world-to-camera transform and set R, T
+        w2c = np.linalg.inv(c2w)
+        R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
+        T = w2c[:3, 3]
+        
         fovy = focal2fov(fov2focal(fovx, image.shape[1]), image.shape[2])
         FovY = fovy 
         FovX = fovx
@@ -278,6 +292,8 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             fovy = focal2fov(fov2focal(fovx, image.shape[1]), image.shape[2])
             FovY = fovy 
             FovX = fovx
+            
+            # print(f"dataset_renders.py FovY: {FovY}, FovX: {FovX},fovx: {fovx}, image.shape[1]: {image.shape[1]}, image.shape[2]: {image.shape[2]}")
 
             cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
                             image_path=image_path, image_name=image_name, width=image.shape[1], height=image.shape[2],
