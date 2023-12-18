@@ -1,16 +1,16 @@
 _base_ = '../dnerf/dnerf_default.py'
 
 OptimizationParams = dict(
-    coarse_iterations = 6000, # 6000, # 3000
+    coarse_iterations = 9000, # 6000, # 3000
     deformation_lr_init = 0.00016,
     deformation_lr_final = 0.0000016,
     deformation_lr_delay_mult = 0.01,
     grid_lr_init = 0.0016,
     grid_lr_final = 0.000016,
-    iterations = 30000, # 40000, # 20000
+    iterations = 60000, # 40000, # 20000
     pruning_interval = 8000,
     percent_dense = 0.01,
-    batch_size = 4
+    batch_size = 16
     # opacity_reset_interval=30000
 
 )
