@@ -1,4 +1,4 @@
-from diffusion_policy.gaussians_utils.panorama_cam import read_and_dump_json, read_and_dump_json_auto_split
+from diffusion_policy.gaussians_utils.panorama_cam import read_and_dump_json, read_and_dump_json_auto_split, read_and_dump_json_merge_new
 
 
 # # static, train = panoramic + wrist
@@ -26,9 +26,16 @@ from diffusion_policy.gaussians_utils.panorama_cam import read_and_dump_json, re
 
 
 
-# static panoramic, dynamic wrist, FOV = 90, train/test = panoramic + wrist, put wrist as the second path in the list
-json_file_list = ['/local/real/chuerpan/repo/4DGaussians/data/robomimic/can_panorama_move_fov_90_static_200',
-                  '/local/real/chuerpan/repo/4DGaussians/data/robomimic/can_main_wrist_dynamic_fov_90_sequencial']
-json_save_path = '/local/real/chuerpan/repo/4DGaussians/data/robomimic/can_fov_90_dynamic_train_pano_wrist_test_wrist_all'
+# # static panoramic, dynamic wrist, FOV = 90, train/test = panoramic + wrist, put wrist as the second path in the list
+# json_file_list = ['/local/real/chuerpan/repo/4DGaussians/data/robomimic/can_panorama_move_fov_90_static_200',
+#                   '/local/real/chuerpan/repo/4DGaussians/data/robomimic/can_main_wrist_dynamic_fov_90_sequencial']
+# json_save_path = '/local/real/chuerpan/repo/4DGaussians/data/robomimic/can_fov_90_dynamic_train_pano_wrist_test_wrist_all'
 
-read_and_dump_json_auto_split(json_file_list= json_file_list, json_save_path = json_save_path, test_percentage=0.1)
+# read_and_dump_json_auto_split(json_file_list= json_file_list, json_save_path = json_save_path, test_percentage=0.1)
+
+# dynamic panoramic, static panoramic, FOV = 90, train/test = dynamic+static/dynamic, put dynamic as the second path in the list
+json_file_list = ['/local/real/chuerpan/repo/4DGaussians/data/robomimic/can_panorama_move_fov_90_static_120',
+                  '/local/real/chuerpan/repo/4DGaussians/data/robomimic/can_panorama_move_fov_90_dynamic']
+json_save_path = '/local/real/chuerpan/repo/4DGaussians/data/robomimic/can_fov_90_dynamic_train_static_dynamic_test_dynamic'
+
+read_and_dump_json_merge_new(json_file_list= json_file_list, json_save_path = json_save_path)

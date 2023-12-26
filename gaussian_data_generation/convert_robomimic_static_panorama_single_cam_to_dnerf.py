@@ -38,14 +38,15 @@ from diffusion_policy.common.camera_utils import CameraMover
 from diffusion_policy.common.multi_camera_utils import CameraMoverMultiWrist, get_observation_from_added_cams, get_observation_with_added_cams
 TIME_INTERVAL = 0.1
 MOVE_CAM = False
-FOV=90
-TRAJ_LEN = 200
+FOV = 90
+TRAJ_LEN = 120
 # HEIGHT = 1080
 # WIDTH = 1920
 HEIGHT = 800
 WIDTH = 800
 gopro = 'gopro' # 'orbslam'
 crop_output = True # 'False
+
 class DistortMode(enum.Enum):
     LINEAR = 'linear'
     NEAREST = 'nearest'
@@ -302,8 +303,8 @@ for wrist_delta_angle in [45]:
     camera_name_obs = camera_name3
     traj_len = TRAJ_LEN
     traj_len = traj_len-1
-    val_split = 6
-    test_split = 6
+    val_split = 0 # 6
+    test_split = 0 # 6
     train_split = traj_len-test_split-val_split
   
     print(f"traj_len: {traj_len},train: {train_split}, val: {val_split}, test: {test_split}")
@@ -345,7 +346,7 @@ for wrist_delta_angle in [45]:
             cam_T[:3,:3] = np.copy(camera_rot)
             cam_T[:3,3] = np.copy(cur_camera_pos)
             json_dict_frame_i['transform_matrix'] = cam_T.tolist()
-            json_dict_frame_i['time'] = t*TIME_INTERVAL
+            json_dict_frame_i['time'] = 0 
             _, quat = T.mat2pose(cam_T)
             json_dict_frame_i['rotation'] = float(np.linalg.norm(T.quat2axisangle(np.copy(quat))))
             angle = 3 # degree
@@ -384,7 +385,7 @@ for wrist_delta_angle in [45]:
             cam_T[:3,:3] = np.copy(camera_rot)
             cam_T[:3,3] = np.copy(cur_camera_pos)
             json_dict_frame_i['transform_matrix'] = cam_T.tolist()
-            json_dict_frame_i['time'] = t*TIME_INTERVAL
+            json_dict_frame_i['time'] = 0
             _, quat = T.mat2pose(cam_T)
             json_dict_frame_i['rotation'] = float(np.linalg.norm(T.quat2axisangle(np.copy(quat))))
             
@@ -426,7 +427,7 @@ for wrist_delta_angle in [45]:
             cam_T[:3,:3] = np.copy(camera_rot)
             cam_T[:3,3] = np.copy(cur_camera_pos)
             json_dict_frame_i['transform_matrix'] = cam_T.tolist()
-            json_dict_frame_i['time'] = t*TIME_INTERVAL
+            json_dict_frame_i['time'] = 0
             _, quat = T.mat2pose(cam_T)
             json_dict_frame_i['rotation'] = float(np.linalg.norm(T.quat2axisangle(np.copy(quat))))
             

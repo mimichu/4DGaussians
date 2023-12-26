@@ -33,7 +33,7 @@ from diffusion_policy.common.multi_camera_utils import ChangeCameraFOV
 from diffusion_policy.gaussians_utils.panorama_cam import create_data_stage_wise_static_wrist
 
 TIME_INTERVAL = 0.1
-FOV = 120
+FOV = 90
 TRAJ_LEN = 200
 HEIGHT = 800
 WIDTH = 800

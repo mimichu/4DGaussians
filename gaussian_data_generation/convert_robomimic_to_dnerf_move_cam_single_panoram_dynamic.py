@@ -34,7 +34,7 @@ from diffusion_policy.gaussians_utils.panorama_cam import create_data_stage_wise
 
 TIME_INTERVAL = 0.1
 FOV = 45
-TRAJ_LEN = 200
+TRAJ_LEN = 120
 HEIGHT = 800
 WIDTH = 800
 

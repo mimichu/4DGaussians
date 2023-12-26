@@ -14,6 +14,7 @@ import cv2
 import enum
 import scipy.interpolate
 from PIL import Image
+
 class DistortMode(enum.Enum):
     LINEAR = 'linear'
     NEAREST = 'nearest'
@@ -39,12 +40,15 @@ from diffusion_policy.common.multi_camera_utils import CameraMoverMultiWrist, ge
 
 MOVE_CAM = False
 FOV = 90
-# HEIGHT = 1080
-# WIDTH = 1920
 HEIGHT = 800
 WIDTH = 800
+object = 'can'
+object_dir = f'{object}_main_wrist_fov_{FOV}_sequencial_cam_pose' # f'{object}_main_wrist_fov_{FOV}_sequencial'
+
 gopro = 'gopro' # 'orbslam'
 crop_output = True # 'False
+
+
 class DistortMode(enum.Enum):
     LINEAR = 'linear'
     NEAREST = 'nearest'
@@ -219,8 +223,6 @@ elif gopro == 'gopro':
     
 
 for wrist_delta_angle in [45]:
-    object = 'can'
-    object_dir = f'{object}_panorama_move_fov_{FOV}'
     dataset_path = 'data/robomimic/datasets/{}/ph/image.hdf5'.format(object)
     if object in ['transport']:
         camera_name = 'shouldercamera0'
@@ -229,32 +231,39 @@ for wrist_delta_angle in [45]:
     camera_name1 = 'frontview'
     camera_name2 = 'birdview'
     camera_name3 = 'robot0_eye_in_hand'
-    # camera_name4 = 'robot0_eye_in_hand'
-    # camera_name5 = 'robot0_eye_in_hand'
+    camera_name4 = 'robot0_eye_in_hand_left'
+    camera_name5 = 'robot0_eye_in_hand_right'
     
     f = h5py.File(dataset_path, 'r')
     states = f['data']['demo_0']['states']
     actions = f['data']['demo_0']['actions']
     images = [x for x in f['data']['demo_0']['obs']['{}_image'.format(camera_name)]]
     animate(images, filename = '{}.mp4'.format(camera_name))
- 
-    shape_meta_yaml = """
+
+    shape_meta_yaml = f"""
     obs:
-        {}_image:
-            shape: [3, 800, 800]
+        {camera_name}_image:
+            shape: [3, {HEIGHT}, {WIDTH}]
             type: rgb
-        {}_image:
-            shape: [3, 800, 800]
+        {camera_name1}_image:
+            shape: [3, {HEIGHT}, {WIDTH}]
             type: rgb
-        {}_image:
-            shape: [3, 800, 800]
+        {camera_name2}_image:
+            shape: [3, {HEIGHT}, {WIDTH}]
             type: rgb
-        {}_image:
-            shape: [3, 800, 800]
+        {camera_name3}_image:
+            shape: [3, {HEIGHT}, {WIDTH}]
+            type: rgb
+        {camera_name4}_image:
+            shape: [3, {HEIGHT}, {WIDTH}]
+            type: rgb
+        {camera_name5}_image:
+            shape: [3, {HEIGHT}, {WIDTH}]
             type: rgb
     action: 
         shape: [10]
-    """.format(camera_name, camera_name1, camera_name2, camera_name3)
+    """
+    
     shape_meta = yaml.load(shape_meta_yaml, Loader=yaml.Loader)
     modality_mapping = collections.defaultdict(list)
     for key, attr in shape_meta['obs'].items():
@@ -279,17 +288,23 @@ for wrist_delta_angle in [45]:
     with open(os.path.join(os.getcwd(), 'pre_camera_mover_xml.xml'), 'w') as f:
         f.write(pre_camera_mover_xml)
         
-    # added_camera_list = [camera_name4, camera_name5]
+    added_camera_list = [camera_name4, camera_name5]
     # wrist_camera_list = [camera_name3, camera_name4, camera_name5]
-    wrist_camera_list = [camera_name]
-    camera_name = camera_name
+    wrist_camera_list = [camera_name3]
+    camera_name = camera_name3
 
 
-    camera_mover = CameraMover(
+    camera_mover = CameraMoverMultiWrist(
         env=env.env,
         camera=camera_name,
+        wrist_cam_left = added_camera_list[0],
+        wrist_cam_right = added_camera_list[1],
+        wrist_delta_angle=wrist_delta_angle,
         fov=FOV
     )
+    wrist_cam_spec_dict = camera_mover.get_wrist_camera_spec()
+    
+    np.savez_compressed('wrist_cam_spec_dict.npz', wrist_cam_spec_dict)
     post_camera_mover_xml = env.env.sim.model.get_xml()
 
     with open(os.path.join(os.getcwd(), 'post_camera_mover_xml.xml'), 'w') as f:
@@ -330,10 +345,11 @@ for wrist_delta_angle in [45]:
         v_pos = action[:3]
 
         obs = env.reset_to({"states" : states[t+1]})
- 
-        # observation, reward, done, info = env.step(np.zeros(actions[t].shape))
-        # env.env.sim.set_state_from_flattened(states[t+1])
-        # env.env.sim.forward()
+        obs = get_observation_with_added_cams(env=env, obs=obs, camera_name_list = added_camera_list, width=env_meta['env_kwargs']['camera_widths'], height=env_meta['env_kwargs']['camera_heights'])
+
+        observation, reward, done, info = env.step(np.zeros(actions[t].shape))
+        env.env.sim.set_state_from_flattened(states[t+1])
+        env.env.sim.forward()
         new_state = env.env.sim.get_state()
 
         for camera_name_obs in wrist_camera_list:
@@ -345,41 +361,42 @@ for wrist_delta_angle in [45]:
             img = (np.moveaxis(img, 0, -1) * 255).astype(np.uint8) # ()(H, W, 3)
             image = Image.fromarray(img)
             image.save(os.path.join(moving_animation_path, f'{file_path.split("/")[-1]}.png'))
-        
+
+            # distort_img = distort_image(img=img, cam_intr=cam_intrinsic_matrix, dist_coeff=D, crop_output=crop_output)
             img_dict[camera_name_obs].append(img) 
-            cur_camera_pos, cur_camera_quat = camera_mover.get_camera_pose()
-            camera_rot = T.quat2mat(cur_camera_quat)
             
- 
+            # site_name = 'robot0_ee'
+            # site_pos = env.env.sim.data.get_site_xpos(site_name)
+            # site_xmat = env.env.sim.data.get_site_xmat(site_name)
+            # json_dict_frame_i['site_pos'] = np.copy(site_pos)
+            # json_dict_frame_i['site_xmat'] = np.copy(site_xmat)
+            
+            body_name = 'robot0_right_hand'
+            ee_pos = env.env.sim.data.get_body_xpos(body_name)
+            ee_xmat = env.env.sim.data.get_body_xmat(body_name)
+            ee_xquat = env.env.sim.data.get_body_xquat(body_name)
+            
+            cam_name = camera_name_obs    
+            cam_pos = env.env.sim.data.get_camera_xpos(cam_name)
+            cam_xmat = env.env.sim.data.get_camera_xmat(cam_name)
+
+            # json_dict_frame_i['cam_pos'] = np.copy(cam_pos)
+            # json_dict_frame_i['cam_xmat'] = np.copy(cam_xmat)
+
+            # json_dict_frame_i['ee_pos'] = np.copy(ee_pos)
+            # json_dict_frame_i['ee_xmat'] = np.copy(ee_xmat)
+
+            
             cam_T = np.eye(4)
-            cam_T[:3,:3] = np.copy(camera_rot)
-            cam_T[:3,3] = np.copy(cur_camera_pos)
+            cam_T[:3,:3] = np.copy(ee_xmat)
+            cam_T[:3,3] = np.copy(ee_pos)
             json_dict_frame_i['transform_matrix'] = cam_T.tolist()
             json_dict_frame_i['time'] = float(new_state.time)
             _, quat = T.mat2pose(cam_T)
             json_dict_frame_i['rotation'] = float(np.linalg.norm(T.quat2axisangle(np.copy(quat))))
-            
-            dot_product= list()
-            angle = 3 # degree
-            for sgn in [1]:
-          
-                rad = sgn * np.pi * angle / 180.0
-                R = T.rotation_matrix(rad, [0, 0, 1], point=None)
-                camera_pose = np.eye(4)
-                camera_pose[:3, :3] = camera_rot
-                camera_pose[:3, 3] = cur_camera_pos
-                camera_pose = R @ camera_pose
-                dot_product.append(camera_pose[:3, 3].dot(v_pos))
-            max_idx = np.argmin(np.abs(dot_product))
-            if max_idx == 0:
-                camera_mover.rotate_camera_world(None, [0, 0, 1], angle)
-            elif max_idx == 2:
-                camera_mover.rotate_camera_world(None, [0, 0, 1], -angle)
- 
             counter_train+=1
             json_dict_frames.append(json_dict_frame_i)
-            
-
+ 
     json_dict_train['frames'] = json_dict_frames
     with open(os.path.join(moving_animation_path.split(stage)[0], f'transforms_{stage}.json'), 'w') as file:
         json.dump(json_dict_train, file)
@@ -400,6 +417,11 @@ for wrist_delta_angle in [45]:
         v_pos = action[:3]
  
         obs = env.reset_to({"states" : states[t+1]})
+        obs = get_observation_with_added_cams(env=env, obs=obs, camera_name_list = added_camera_list, width=env_meta['env_kwargs']['camera_widths'], height=env_meta['env_kwargs']['camera_heights'])
+ 
+        observation, reward, done, info = env.step(np.zeros(actions[t].shape))
+        env.env.sim.set_state_from_flattened(states[t+1])
+        env.env.sim.forward()
         new_state = env.env.sim.get_state()
  
         for camera_name_obs in wrist_camera_list:
@@ -411,36 +433,38 @@ for wrist_delta_angle in [45]:
             image = Image.fromarray(img)
             image.save(os.path.join(moving_animation_path, f'{file_path.split("/")[-1]}.png'))
 
+            # distort_img = distort_image(img=img, cam_intr=cam_intrinsic_matrix, dist_coeff=D, crop_output=crop_output)
             img_dict[camera_name_obs].append(img) 
-            cur_camera_pos, cur_camera_quat = camera_mover.get_camera_pose()
-            camera_rot = T.quat2mat(cur_camera_quat)
             
+            # site_name = 'robot0_ee'
+            # site_pos = env.env.sim.data.get_site_xpos(site_name)
+            # site_xmat = env.env.sim.data.get_site_xmat(site_name)
+            # json_dict_frame_i['site_pos'] = np.copy(site_pos)
+            # json_dict_frame_i['site_xmat'] = np.copy(site_xmat)
+            
+            body_name = 'robot0_right_hand'
+            ee_pos = env.env.sim.data.get_body_xpos(body_name)
+            ee_xmat = env.env.sim.data.get_body_xmat(body_name)
+            ee_xquat = env.env.sim.data.get_body_xquat(body_name)
+            
+            cam_name = camera_name_obs   
+            cam_pos = env.env.sim.data.get_camera_xpos(cam_name)
+            cam_xmat = env.env.sim.data.get_camera_xmat(cam_name)
+            
+            # json_dict_frame_i['cam_pos'] = np.copy(cam_pos)
+            # json_dict_frame_i['cam_xmat'] = np.copy(cam_xmat)
  
+            # json_dict_frame_i['ee_pos'] = np.copy(ee_pos)
+            # json_dict_frame_i['ee_xmat'] = np.copy(ee_xmat)
+
+            
             cam_T = np.eye(4)
-            cam_T[:3,:3] = np.copy(camera_rot)
-            cam_T[:3,3] = np.copy(cur_camera_pos)
+            cam_T[:3,:3] = np.copy(ee_xmat)
+            cam_T[:3,3] = np.copy(ee_pos)
             json_dict_frame_i['transform_matrix'] = cam_T.tolist()
             json_dict_frame_i['time'] = float(new_state.time)
             _, quat = T.mat2pose(cam_T)
             json_dict_frame_i['rotation'] = float(np.linalg.norm(T.quat2axisangle(np.copy(quat))))
-            
-            dot_product= list()
-            angle = 3 # degree
-            for sgn in [1]:
-       
-                rad = sgn * np.pi * angle / 180.0
-                R = T.rotation_matrix(rad, [0, 0, 1], point=None)
-                camera_pose = np.eye(4)
-                camera_pose[:3, :3] = camera_rot
-                camera_pose[:3, 3] = cur_camera_pos
-                camera_pose = R @ camera_pose
-                dot_product.append(camera_pose[:3, 3].dot(v_pos))
-            max_idx = np.argmin(np.abs(dot_product))
-            if max_idx == 0:
-                camera_mover.rotate_camera_world(None, [0, 0, 1], angle)
-            elif max_idx == 2:
-                camera_mover.rotate_camera_world(None, [0, 0, 1], -angle)
- 
             counter_val+=1
             json_dict_frames_val.append(json_dict_frame_i)
  
@@ -463,47 +487,57 @@ for wrist_delta_angle in [45]:
         v_pos = action[:3]
  
         obs = env.reset_to({"states" : states[t+1]})
+        obs = get_observation_with_added_cams(env=env, obs=obs, camera_name_list = added_camera_list, width=env_meta['env_kwargs']['camera_widths'], height=env_meta['env_kwargs']['camera_heights'])
+ 
+        observation, reward, done, info = env.step(np.zeros(actions[t].shape))
+        env.env.sim.set_state_from_flattened(states[t+1])
+        env.env.sim.forward()
         new_state = env.env.sim.get_state()
  
         for camera_name_obs in wrist_camera_list:
             json_dict_frame_i = {}
             file_path = f'./{stage}/r_{str(counter_test).zfill(3)}'
             json_dict_frame_i['file_path'] = file_path
-            
             img = obs[f'{camera_name_obs}_image']
             img = (np.moveaxis(img, 0, -1) * 255).astype(np.uint8) # ()(H, W, 3)
             image = Image.fromarray(img)
             image.save(os.path.join(moving_animation_path, f'{file_path.split("/")[-1]}.png'))
 
+            # distort_img = distort_image(img=img, cam_intr=cam_intrinsic_matrix, dist_coeff=D, crop_output=crop_output)
             img_dict[camera_name_obs].append(img) 
-            cur_camera_pos, cur_camera_quat = camera_mover.get_camera_pose()
-            camera_rot = T.quat2mat(cur_camera_quat)
             
+            # site_name = 'robot0_ee'
+            # site_pos = env.env.sim.data.get_site_xpos(site_name)
+            # site_xmat = env.env.sim.data.get_site_xmat(site_name)
+            # json_dict_frame_i['site_pos'] = np.copy(site_pos)
+            # json_dict_frame_i['site_xmat'] = np.copy(site_xmat)
+            
+            body_name = 'robot0_right_hand'
+            ee_pos = env.env.sim.data.get_body_xpos(body_name)
+            ee_xmat = env.env.sim.data.get_body_xmat(body_name)
+            ee_xquat = env.env.sim.data.get_body_xquat(body_name)
+            
+            # cam_name = 'robot0_eye_in_hand'   
+            cam_name = camera_name_obs  
+            cam_pos = env.env.sim.data.get_camera_xpos(cam_name)
+            cam_xmat = env.env.sim.data.get_camera_xmat(cam_name)
+            
+
+            
+            # json_dict_frame_i['cam_pos'] = np.copy(cam_pos)
+            # json_dict_frame_i['cam_xmat'] = np.copy(cam_xmat)
  
+            # json_dict_frame_i['ee_pos'] = np.copy(ee_pos)
+            # json_dict_frame_i['ee_xmat'] = np.copy(ee_xmat)
+
+            
             cam_T = np.eye(4)
-            cam_T[:3,:3] = np.copy(camera_rot)
-            cam_T[:3,3] = np.copy(cur_camera_pos)
+            cam_T[:3,:3] = np.copy(ee_xmat)
+            cam_T[:3,3] = np.copy(ee_pos)
             json_dict_frame_i['transform_matrix'] = cam_T.tolist()
             json_dict_frame_i['time'] = float(new_state.time)
             _, quat = T.mat2pose(cam_T)
             json_dict_frame_i['rotation'] = float(np.linalg.norm(T.quat2axisangle(np.copy(quat))))
-            
-            dot_product= list()
-            angle = 3 # degree
-            for sgn in [1]:
-                rad = sgn * np.pi * angle / 180.0
-                R = T.rotation_matrix(rad, [0, 0, 1], point=None)
-                camera_pose = np.eye(4)
-                camera_pose[:3, :3] = camera_rot
-                camera_pose[:3, 3] = cur_camera_pos
-                camera_pose = R @ camera_pose
-                dot_product.append(camera_pose[:3, 3].dot(v_pos))
-            max_idx = np.argmin(np.abs(dot_product))
-            if max_idx == 0:
-                camera_mover.rotate_camera_world(None, [0, 0, 1], angle)
-            elif max_idx == 2:
-                camera_mover.rotate_camera_world(None, [0, 0, 1], -angle)
- 
             counter_test+=1
             json_dict_frames_test.append(json_dict_frame_i)
  
@@ -515,4 +549,3 @@ for wrist_delta_angle in [45]:
     # animate_tricam(imgs_dict=img_dict, keys=[camera_name4, camera_name3, camera_name5],\
     #     filename=os.path.join(moving_animation_path, f'{object}_tricam_moving_animation_{wrist_delta_angle}_fov_{FOV}_{gopro}_cropOP_{crop_output}.mp4'))
  
-# %%
